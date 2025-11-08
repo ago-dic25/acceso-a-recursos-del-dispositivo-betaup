@@ -1,86 +1,141 @@
-import { StyleSheet, Text, View, Button, TextInput, FlatList, ListView } from 'react-native';
+import { StyleSheet, Text, View, Button, TextInput, FlatList, ListView, Image, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import {Platform} from 'react-native';
-import {Camera, CameraType} from 'expo-camera';
-import * as MediaLibrary  from 'expo-media-library';
+import { Platform } from 'react-native';
+import { Camera, CameraType } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
+// Importamos los estilos desde tu archivo misEstilos.js
+import { styles } from './misEstilos'; 
 
 export default function App() {
-  
+
   const [permisos, setPermisos] = useState(null);
   const [foto, setFoto] = useState(null);
-  const [tipoCamara, setTipoCamera] = useState('back');
+  const [tipoCamara, setTipoCamera] = useState(CameraType.back); // Usamos CameraType.back
   const [camaraRef, setCamaraRef] = useState(null);
-  
-  
-  useEffect(()=> {
-    (async () => {
-      const permisosMediaLibrary = await MediaLibrary.requestPermissionsAsync();
-      const permisosCamara = await Camera.requestCameraPermissionsAsync();
 
-      setPermisos(estatus.status === 'granted');
-      if(!permisosCamara.granted){
-        console('Se necesitan permisos para usar la camara');
+
+  useEffect(() => {
+    (async () => {
+      // Pedimos permisos de cámara
+      const { status: camaraStatus } = await Camera.requestCameraPermissionsAsync();
+      // Pedimos permisos de galería (carpeta)
+      const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+
+      // Guardamos en el estado si ambos permisos fueron concedidos
+      if (camaraStatus === 'granted' && mediaStatus === 'granted') {
+        setPermisos(true);
+      } else {
+        setPermisos(false);
+        Alert.alert(
+          "Permisos requeridos",
+          "Se necesitan permisos de cámara y galería para usar esta función."
+        );
       }
     })();
   }, []);
 
-  
-  if(permisos === null || permisos === 'denied'){
-    return <Text>No se tienen permisos para acceder a camara</Text>
-  }  
-  
-  const tomarFoto = async () =>{
-    if(camaraRef){
-      try{
-        const datosFoto = await camaraRef.takePictureAsync();
-        setFoto(datosFoto.uri);
-        console.log(datosFoto);
-        //const asset = await MediaLibrary.createAssetAsync(datosFoto.uri);
-        //console.log('foto guardada en galeria', asset);
-      }catch(error){
-        console.log('error ' + error)
-      }
-    }
+
+  if (permisos === null) {
+    // Vista de carga mientras se solicitan permisos
+    return <View />;
+  }
+  if (permisos === false) {
+    // Vista de error si se denegaron los permisos
+    return <Text style={styles.textoError}>No se tienen permisos para acceder a la cámara o galería.</Text>;
   }
 
-  const guardarFoto = async  () => {
-    if(foto){
-      try{
-        //guardar foto en galeria
+  const tomarFoto = async () => {
+    if (camaraRef) {
+      try {
+        const datosFoto = await camaraRef.takePictureAsync();
+        setFoto(datosFoto.uri); // Guardamos la URI de la foto en el estado
+        console.log(datosFoto);
+      } catch (error) {
+        console.log('Error al tomar foto: ' + error);
       }
-      catch(error){}
     }
-  }
+  };
+
+  const guardarFoto = async () => {
+    if (foto) {
+      try {
+        // Usamos MediaLibrary para guardar la foto en la galería
+        await MediaLibrary.createAssetAsync(foto);
+        Alert.alert('¡Guardada!', 'La foto ha sido guardada en tu galería.');
+        setFoto(null); // Limpiamos la foto para volver a la cámara
+      } catch (error) {
+        console.log('Error al guardar foto: ' + error);
+        Alert.alert('Error', 'No se pudo guardar la foto.');
+      }
+    }
+  };
+
+  const descartarFoto = () => {
+    setFoto(null); // Simplemente descartamos la foto y volvemos a la cámara
+  };
+
+  // ---- RENDERIZADO ----
   
+  // Si NO hay foto, mostramos la cámara
+  if (!foto) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Camera 
+          style={styles.camera} 
+          type={tipoCamara} 
+          ref={ref => setCamaraRef(ref)}
+        >
+          <View style={styles.botonesCamara}>
+            {/* Botón para voltear cámara */}
+            <TouchableOpacity
+              style={styles.botonFlip}
+              onPress={() => {
+                setTipoCamera(
+                  tipoCamara === CameraType.back
+                    ? CameraType.front
+                    : CameraType.back
+                );
+              }}>
+              <Text style={styles.textoBoton}> Voltear </Text>
+            </TouchableOpacity>
+
+            {/* Botón de captura */}
+            <TouchableOpacity style={styles.botonCaptura} onPress={tomarFoto} />
+            
+            {/* Dejamos un espacio en blanco para centrar el botón de captura */}
+            <View style={styles.botonFlip} /> 
+          </View>
+        </Camera>
+        <StatusBar style="auto" />
+      </SafeAreaView>
+    );
+  }
+
+  // Si SÍ hay foto, mostramos la VISTA PREVIA
   return (
-    <View style={styles.container}>
-    
-   {permisos ? (
-     <Camera
-    type={tipoCamara}
-    ref={ref => setCamaraRef(ref)}>
-    
-    </Camera>
-   ) : (<Text>No access to camera</Text>)}
-    <Button title="Tomar Foto" onPress={tomarFoto}>Tomar Foto</Button>
-    <StatusBar style="auto" />
-    
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* Mostramos la imagen usando la URI guardada en el estado 'foto' */}
+        <Image source={{ uri: foto }} style={styles.preview} />
+
+        <View style={styles.botonesPreview}>
+          <TouchableOpacity 
+            onPress={guardarFoto} 
+            style={[styles.button, styles.blueButton]}
+          >
+            <Text style={styles.buttonText}>Guardar Foto</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={descartarFoto} 
+            style={[styles.button, { backgroundColor: '#cc0000' }]} // Estilo rápido para botón de descartar
+          >
+            <Text style={styles.buttonText}>Tomar Otra</Text>
+          </TouchableOpacity>
+        </View>
+        <StatusBar style="auto" />
+      </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    color: '#BD93BD',
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Platform.OS === 'ios' ? 0 : StatusBar.currentHeight
-  },
-  camera: {
-    flex: 1,
-    aspectRatio:1
-  }
-});
- 
